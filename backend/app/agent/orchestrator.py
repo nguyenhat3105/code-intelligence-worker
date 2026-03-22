@@ -6,55 +6,18 @@ from app.tools.static_analyzer import run_static_analysis
 from app.tools.rag_search import search_coding_standards, search_test_patterns
 
 load_dotenv()
-client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+
+client = Groq(
+    api_key=os.environ.get("GROQ_API_KEY", ""),
+    timeout=60.0,
+)
+
 MODEL = "llama-3.3-70b-versatile"
 
 TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "run_static_analysis",
-            "description": "Run static analysis on source code to detect syntax errors, code smells, and bugs.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string"},
-                    "language": {"type": "string"}
-                },
-                "required": ["code", "language"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_coding_standards",
-            "description": "Search the knowledge base for relevant coding standards and best practices.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "language": {"type": "string"}
-                },
-                "required": ["query", "language"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_test_patterns",
-            "description": "Search for relevant test patterns and examples.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code_context": {"type": "string"},
-                    "framework": {"type": "string"}
-                },
-                "required": ["code_context", "framework"]
-            }
-        }
-    }
+    {"type": "function", "function": {"name": "run_static_analysis", "description": "Run static analysis on source code.", "parameters": {"type": "object", "properties": {"code": {"type": "string"}, "language": {"type": "string"}}, "required": ["code", "language"]}}},
+    {"type": "function", "function": {"name": "search_coding_standards", "description": "Search knowledge base for coding standards.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "language": {"type": "string"}}, "required": ["query", "language"]}}},
+    {"type": "function", "function": {"name": "search_test_patterns", "description": "Search for test patterns.", "parameters": {"type": "object", "properties": {"code_context": {"type": "string"}, "framework": {"type": "string"}}, "required": ["code_context", "framework"]}}}
 ]
 
 TOOL_MAP = {
@@ -63,149 +26,58 @@ TOOL_MAP = {
     "search_test_patterns": search_test_patterns,
 }
 
-REVIEW_JSON = """
-{
-  \"review\": {
-    \"summary\": \"brief overall assessment\",
-    \"score\": 75,
-    \"issues\": [
-      {
-        \"line\": 12,
-        \"severity\": \"HIGH\",
-        \"category\": \"Security\",
-        \"title\": \"short title\",
-        \"description\": \"detailed explanation\",
-        \"suggestion\": \"how to fix\"
-      }
-    ],
-    \"positive_aspects\": [\"good things in the code\"]
-  }
-}"""
+BOTH_JSON = """{\n  \"review\": {\n    \"summary\": \"brief assessment\",\n    \"score\": 75,\n    \"issues\": [{\"line\": 1, \"severity\": \"HIGH\", \"category\": \"Security\", \"title\": \"t\", \"description\": \"d\", \"suggestion\": \"s\"}],\n    \"positive_aspects\": [\"good\"]\n  },\n  \"tests\": {\n    \"framework\": \"pytest\",\n    \"summary\": \"strategy\",\n    \"test_cases\": [{\"name\": \"test_x\", \"description\": \"d\", \"type\": \"unit\", \"code\": \"def test_x(): pass\"}],\n    \"coverage_areas\": [\"area\"]\n  }\n}"""
 
-TEST_JSON = """
-{
-  \"tests\": {
-    \"framework\": \"pytest or junit\",
-    \"summary\": \"test strategy description\",
-    \"test_cases\": [
-      {
-        \"name\": \"test_function_name\",
-        \"description\": \"what this test verifies\",
-        \"type\": \"unit\",
-        \"code\": \"complete test code here\"
-      }
-    ],
-    \"coverage_areas\": [\"areas covered\"]
-  }
-}"""
+REVIEW_JSON = """{\n  \"review\": {\n    \"summary\": \"brief assessment\",\n    \"score\": 75,\n    \"issues\": [{\"line\": 1, \"severity\": \"HIGH\", \"category\": \"Security\", \"title\": \"t\", \"description\": \"d\", \"suggestion\": \"s\"}],\n    \"positive_aspects\": [\"good\"]\n  }\n}"""
 
-BOTH_JSON = """
-{
-  \"review\": {
-    \"summary\": \"brief overall assessment\",
-    \"score\": 75,
-    \"issues\": [
-      {
-        \"line\": 12,
-        \"severity\": \"HIGH\",
-        \"category\": \"Security\",
-        \"title\": \"short title\",
-        \"description\": \"detailed explanation\",
-        \"suggestion\": \"how to fix\"
-      }
-    ],
-    \"positive_aspects\": [\"good things\"]
-  },
-  \"tests\": {
-    \"framework\": \"pytest or junit\",
-    \"summary\": \"test strategy description\",
-    \"test_cases\": [
-      {
-        \"name\": \"test_function_name\",
-        \"description\": \"what this test verifies\",
-        \"type\": \"unit\",
-        \"code\": \"complete test code here\"
-      }
-    ],
-    \"coverage_areas\": [\"areas covered\"]
-  }
-}"""
+TEST_JSON = """{\n  \"tests\": {\n    \"framework\": \"pytest\",\n    \"summary\": \"strategy\",\n    \"test_cases\": [{\"name\": \"test_x\", \"description\": \"d\", \"type\": \"unit\", \"code\": \"def test_x(): pass\"}],\n    \"coverage_areas\": [\"area\"]\n  }\n}"""
 
 def build_system_prompt(mode: str) -> str:
-    base = """You are an expert Senior Software Engineer acting as a Code Intelligence Worker.
-Analyze source code using the available tools and produce structured JSON output.
-
-IMPORTANT:
-- You MUST call the tools before giving your final answer
-- Always call run_static_analysis first
-- Then call search_coding_standards
-- If mode includes tests, call search_test_patterns
-- Your FINAL response must be ONLY valid JSON, no markdown fences, no explanation
-"""
-    if mode == "review":
-        return base + "\nReturn ONLY this JSON structure (no markdown):" + REVIEW_JSON
-    elif mode == "test":
-        return base + "\nReturn ONLY this JSON structure (no markdown):" + TEST_JSON
-    else:
-        return base + "\nReturn ONLY this JSON structure (no markdown):" + BOTH_JSON
+    schema = REVIEW_JSON if mode == "review" else TEST_JSON if mode == "test" else BOTH_JSON
+    return f"""You are a Senior Software Engineer doing code analysis.\nUse the provided tools, then return ONLY raw JSON (no markdown, no ```json).\n\nSTEPS:\n1. Call run_static_analysis\n2. Call search_coding_standards\n3. If tests needed, call search_test_patterns\n4. Return ONLY this JSON schema (filled with real data):\n{schema}"""
 
 async def run_agent(code: str, language: str, mode: str) -> dict:
     framework = "pytest" if language == "python" else "junit"
     messages = [
         {"role": "system", "content": build_system_prompt(mode)},
-        {"role": "user", "content": f"""Analyze this {language} code:\n\n```{language}\n{code}\n```\n\nLanguage: {language} | Framework: {framework} | Task: {mode}\nCall all tools first, then return the final JSON result."""}
+        {"role": "user", "content": f"Analyze this {language} code:\n\n```{language}\n{code[:3000]}\n```\n\nLanguage: {language}, Framework: {framework}, Mode: {mode}"}
     ]
-
-    for iteration in range(6):
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=4096,
-            temperature=0.1,
-        )
+    print(f"\ud83d\ude80 Groq agent | model={MODEL} | mode={mode}")
+    final_message = None
+    for iteration in range(8):
+        print(f"  iter {iteration+1}")
+        response = client.chat.completions.create(model=MODEL, messages=messages, tools=TOOLS, tool_choice="auto", max_tokens=3000, temperature=0.1)
         message = response.choices[0].message
-        messages.append({"role": "assistant", "content": message.content or "", "tool_calls": message.tool_calls})
-
+        final_message = message
+        assistant_msg = {"role": "assistant", "content": message.content or ""}
+        if message.tool_calls:
+            assistant_msg["tool_calls"] = message.tool_calls
+        messages.append(assistant_msg)
         if not message.tool_calls:
-            print(f"✅ Agent finished after {iteration} tool iterations")
+            print("  \u2705 Done")
             break
-
         for tool_call in message.tool_calls:
             fn_name = tool_call.function.name
-            fn_args = json.loads(tool_call.function.arguments)
-            print(f"🔧 Tool: {fn_name}({list(fn_args.keys())})")
+            try:
+                fn_args = json.loads(tool_call.function.arguments)
+            except:
+                fn_args = {}
+            print(f"  \ud83d\udd27 {fn_name}")
             tool_result = TOOL_MAP.get(fn_name, lambda **k: {"error": "unknown"})(**fn_args)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": json.dumps(tool_result)
-            })
-
-    final_text = message.content or ""
+            messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": json.dumps(tool_result)[:2000]})
+    final_text = (final_message.content or "") if final_message else ""
     clean = final_text.strip()
     if "```" in clean:
-        parts = clean.split("```")
-        for part in parts:
-            part = part.strip()
-            if part.startswith("json"):
-                part = part[4:].strip()
-            if part.startswith("{"):
-                clean = part
-                break
-    start = clean.find("{")
-    end = clean.rfind("}") + 1
+        for part in clean.split("```"):
+            p = part.strip().lstrip("json").strip()
+            if p.startswith("{"):
+                clean = p; break
+    start, end = clean.find("{"), clean.rfind("}") + 1
     if start != -1 and end > start:
         clean = clean[start:end]
-
     try:
         result = json.loads(clean)
         result["language"] = language
         return result
-    except json.JSONDecodeError:
-        return {
-            "language": language,
-            "review": {"summary": "Parse error", "score": 50, "issues": [], "positive_aspects": [], "raw": final_text},
-            "tests": None
-        }
+    except:
+        return {"language": language, "review": {"summary": f"Parse error. Raw: {final_text[:200]}", "score": 50, "issues": [], "positive_aspects": []}, "tests": None}
