@@ -20,7 +20,6 @@ Visit https://aistudio.google.com → Sign in → Get API Key (free tier: 15 req
 cd backend
 cp .env.example .env
 # Edit .env → add your GEMINI_API_KEY
-
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
@@ -39,20 +38,16 @@ npm run dev
 
 ```
 User (React UI)
-    │
-    ▼ POST /api/analyze
+    ↓ POST /api/analyze
 FastAPI Backend
-    │
-    ▼
+    ↓
 AI Agent (Gemini 1.5 Flash)
     ├── Tool 1: run_static_analysis  (pylint / regex)
     ├── Tool 2: search_coding_standards  (ChromaDB RAG)
     └── Tool 3: search_test_patterns     (ChromaDB RAG)
-    │
-    ▼
+    ↓
 Structured JSON Response
-    │
-    ▼
+    ↓
 UI: Code Review Tab + Test Cases Tab
 ```
 
@@ -60,40 +55,6 @@ UI: Code Review Tab + Test Cases Tab
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/analyze` | Analyze code (review + tests) |
+| POST | `/api/analyze` | Analyze code |
 | GET | `/health` | Health check |
 | GET | `/api/languages` | Supported languages |
-
-### Request
-```json
-{
-  "code": "your source code",
-  "language": "python",
-  "mode": "both"
-}
-```
-
-### Response
-```json
-{
-  "language": "python",
-  "review": {
-    "summary": "...",
-    "score": 65,
-    "issues": [...],
-    "positive_aspects": [...]
-  },
-  "tests": {
-    "framework": "pytest",
-    "test_cases": [...],
-    "coverage_areas": [...]
-  }
-}
-```
-
-## Knowledge Base (RAG)
-27 curated documents covering:
-- Python & Java coding standards (Google Style Guide)
-- OWASP security guidelines
-- pytest & JUnit 5 test patterns
-- Clean Code principles
