@@ -1,60 +1,59 @@
 import os
 import json
 from dotenv import load_dotenv
-import google.generativeai as genai
+from groq import Groq
 from app.tools.static_analyzer import run_static_analysis
 from app.tools.rag_search import search_coding_standards, search_test_patterns
 
 load_dotenv()
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
-
-# Model fallback list — tries each in order until one works
-MODEL_PRIORITY = [
-    "gemini-2.0-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
-]
+client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+MODEL = "llama-3.3-70b-versatile"
 
 TOOLS = [
     {
-        "function_declarations": [
-            {
-                "name": "run_static_analysis",
-                "description": "Run static analysis on source code to detect syntax errors, code smells, and bugs.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "code": {"type": "string"},
-                        "language": {"type": "string"}
-                    },
-                    "required": ["code", "language"]
-                }
-            },
-            {
-                "name": "search_coding_standards",
-                "description": "Search the knowledge base for coding standards and best practices.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "language": {"type": "string"}
-                    },
-                    "required": ["query", "language"]
-                }
-            },
-            {
-                "name": "search_test_patterns",
-                "description": "Search for relevant test patterns and examples.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "code_context": {"type": "string"},
-                        "framework": {"type": "string"}
-                    },
-                    "required": ["code_context", "framework"]
-                }
+        "type": "function",
+        "function": {
+            "name": "run_static_analysis",
+            "description": "Run static analysis on source code to detect syntax errors, code smells, and bugs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string"},
+                    "language": {"type": "string"}
+                },
+                "required": ["code", "language"]
             }
-        ]
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_coding_standards",
+            "description": "Search the knowledge base for relevant coding standards and best practices.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "language": {"type": "string"}
+                },
+                "required": ["query", "language"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_test_patterns",
+            "description": "Search for relevant test patterns and examples.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code_context": {"type": "string"},
+                    "framework": {"type": "string"}
+                },
+                "required": ["code_context", "framework"]
+            }
+        }
     }
 ]
 
@@ -66,155 +65,147 @@ TOOL_MAP = {
 
 REVIEW_JSON = """
 {
-  "review": {
-    "summary": "brief overall assessment",
-    "score": 75,
-    "issues": [
+  \"review\": {
+    \"summary\": \"brief overall assessment\",
+    \"score\": 75,
+    \"issues\": [
       {
-        "line": 12,
-        "severity": "HIGH",
-        "category": "Security|Performance|Style|Bug",
-        "title": "short title",
-        "description": "detailed explanation",
-        "suggestion": "how to fix"
+        \"line\": 12,
+        \"severity\": \"HIGH\",
+        \"category\": \"Security\",
+        \"title\": \"short title\",
+        \"description\": \"detailed explanation\",
+        \"suggestion\": \"how to fix\"
       }
     ],
-    "positive_aspects": ["good things in the code"]
+    \"positive_aspects\": [\"good things in the code\"]
   }
-}
-"""
+}"""
 
 TEST_JSON = """
 {
-  "tests": {
-    "framework": "pytest or junit",
-    "summary": "test strategy description",
-    "test_cases": [
+  \"tests\": {
+    \"framework\": \"pytest or junit\",
+    \"summary\": \"test strategy description\",
+    \"test_cases\": [
       {
-        "name": "test_function_name",
-        "description": "what this test verifies",
-        "type": "unit|edge_case|negative",
-        "code": "complete test code here"
+        \"name\": \"test_function_name\",
+        \"description\": \"what this test verifies\",
+        \"type\": \"unit\",
+        \"code\": \"complete test code here\"
       }
     ],
-    "coverage_areas": ["areas covered"]
+    \"coverage_areas\": [\"areas covered\"]
   }
-}
-"""
+}"""
 
 BOTH_JSON = """
 {
-  "review": {
-    "summary": "brief overall assessment",
-    "score": 75,
-    "issues": [
+  \"review\": {
+    \"summary\": \"brief overall assessment\",
+    \"score\": 75,
+    \"issues\": [
       {
-        "line": 12,
-        "severity": "HIGH",
-        "category": "Security|Performance|Style|Bug",
-        "title": "short title",
-        "description": "detailed explanation",
-        "suggestion": "how to fix"
+        \"line\": 12,
+        \"severity\": \"HIGH\",
+        \"category\": \"Security\",
+        \"title\": \"short title\",
+        \"description\": \"detailed explanation\",
+        \"suggestion\": \"how to fix\"
       }
     ],
-    "positive_aspects": ["good things"]
+    \"positive_aspects\": [\"good things\"]
   },
-  "tests": {
-    "framework": "pytest or junit",
-    "summary": "test strategy description",
-    "test_cases": [
+  \"tests\": {
+    \"framework\": \"pytest or junit\",
+    \"summary\": \"test strategy description\",
+    \"test_cases\": [
       {
-        "name": "test_function_name",
-        "description": "what this test verifies",
-        "type": "unit|edge_case|negative",
-        "code": "complete test code here"
+        \"name\": \"test_function_name\",
+        \"description\": \"what this test verifies\",
+        \"type\": \"unit\",
+        \"code\": \"complete test code here\"
       }
     ],
-    "coverage_areas": ["areas covered"]
+    \"coverage_areas\": [\"areas covered\"]
   }
-}
-"""
+}"""
 
 def build_system_prompt(mode: str) -> str:
     base = """You are an expert Senior Software Engineer acting as a Code Intelligence Worker.
 Analyze source code using the available tools and produce structured JSON output.
 
-Workflow:
-1. Call run_static_analysis to detect raw issues
-2. Call search_coding_standards for best practices
-3. If generating tests, call search_test_patterns
-4. Return ONLY valid JSON, no markdown or extra text.
+IMPORTANT:
+- You MUST call the tools before giving your final answer
+- Always call run_static_analysis first
+- Then call search_coding_standards
+- If mode includes tests, call search_test_patterns
+- Your FINAL response must be ONLY valid JSON, no markdown fences, no explanation
 """
     if mode == "review":
-        return base + "Return this JSON structure:" + REVIEW_JSON
+        return base + "\nReturn ONLY this JSON structure (no markdown):" + REVIEW_JSON
     elif mode == "test":
-        return base + "Return this JSON structure:" + TEST_JSON
+        return base + "\nReturn ONLY this JSON structure (no markdown):" + TEST_JSON
     else:
-        return base + "Return this JSON structure:" + BOTH_JSON
-
-async def _call_model(model_name: str, system_prompt: str, user_message: str):
-    model = genai.GenerativeModel(
-        model_name=model_name,
-        system_instruction=system_prompt,
-        tools=TOOLS,
-    )
-    chat = model.start_chat()
-    response = chat.send_message(user_message)
-
-    for _ in range(5):
-        has_fn = False
-        for part in response.parts:
-            if hasattr(part, "function_call") and part.function_call.name:
-                has_fn = True
-                fn_name = part.function_call.name
-                fn_args = dict(part.function_call.args)
-                print(f"🔧 [{model_name}] {fn_name}({list(fn_args.keys())})")
-                tool_result = TOOL_MAP.get(fn_name, lambda **k: {"error": "unknown"})(**fn_args)
-                response = chat.send_message(
-                    genai.protos.Content(parts=[genai.protos.Part(
-                        function_response=genai.protos.FunctionResponse(
-                            name=fn_name,
-                            response={"result": json.dumps(tool_result)}
-                        )
-                    )])
-                )
-        if not has_fn:
-            break
-    return response
+        return base + "\nReturn ONLY this JSON structure (no markdown):" + BOTH_JSON
 
 async def run_agent(code: str, language: str, mode: str) -> dict:
     framework = "pytest" if language == "python" else "junit"
-    system_prompt = build_system_prompt(mode)
-    user_message = f"""Analyze this {language} code:\n\n```{language}\n{code}\n```\n\nLanguage: {language} | Framework: {framework} | Task: {mode}\nUse all tools, then return the final JSON."""
+    messages = [
+        {"role": "system", "content": build_system_prompt(mode)},
+        {"role": "user", "content": f"""Analyze this {language} code:\n\n```{language}\n{code}\n```\n\nLanguage: {language} | Framework: {framework} | Task: {mode}\nCall all tools first, then return the final JSON result."""}
+    ]
 
-    last_error = None
-    final_text = ""
-    for model_name in MODEL_PRIORITY:
-        try:
-            print(f"🤖 Trying model: {model_name}")
-            response = await _call_model(model_name, system_prompt, user_message)
-            final_text = "".join(p.text for p in response.parts if hasattr(p, "text"))
-            clean = final_text.strip()
-            if clean.startswith("```"):
-                clean = clean.split("```")[1]
-                if clean.startswith("json"):
-                    clean = clean[4:]
-            clean = clean.strip()
-            result = json.loads(clean)
-            result["language"] = language
-            print(f"✅ Success with: {model_name}")
-            return result
-        except json.JSONDecodeError:
-            return {
-                "language": language,
-                "review": {"summary": "Parse error", "score": 0, "issues": [], "positive_aspects": [], "raw": final_text},
-                "tests": None
-            }
-        except Exception as e:
-            last_error = str(e)
-            print(f"⚠️  {model_name} failed: {e}")
-            if "429" in str(e) or "quota" in str(e).lower() or "not found" in str(e).lower() or "404" in str(e):
-                continue
-            raise
+    for iteration in range(6):
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",
+            max_tokens=4096,
+            temperature=0.1,
+        )
+        message = response.choices[0].message
+        messages.append({"role": "assistant", "content": message.content or "", "tool_calls": message.tool_calls})
 
-    raise Exception(f"All models exhausted. Last error: {last_error}")
+        if not message.tool_calls:
+            print(f"✅ Agent finished after {iteration} tool iterations")
+            break
+
+        for tool_call in message.tool_calls:
+            fn_name = tool_call.function.name
+            fn_args = json.loads(tool_call.function.arguments)
+            print(f"🔧 Tool: {fn_name}({list(fn_args.keys())})")
+            tool_result = TOOL_MAP.get(fn_name, lambda **k: {"error": "unknown"})(**fn_args)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(tool_result)
+            })
+
+    final_text = message.content or ""
+    clean = final_text.strip()
+    if "```" in clean:
+        parts = clean.split("```")
+        for part in parts:
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            if part.startswith("{"):
+                clean = part
+                break
+    start = clean.find("{")
+    end = clean.rfind("}") + 1
+    if start != -1 and end > start:
+        clean = clean[start:end]
+
+    try:
+        result = json.loads(clean)
+        result["language"] = language
+        return result
+    except json.JSONDecodeError:
+        return {
+            "language": language,
+            "review": {"summary": "Parse error", "score": 50, "issues": [], "positive_aspects": [], "raw": final_text},
+            "tests": None
+        }

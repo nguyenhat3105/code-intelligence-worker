@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()  # Load .env FIRST before any other imports
+load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,4 +26,4 @@ app.include_router(router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "Code Intelligence Worker"}
+    return {"status": "ok", "service": "Code Intelligence Worker", "llm": "Groq/llama-3.3-70b"}
