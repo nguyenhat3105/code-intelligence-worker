@@ -6,7 +6,11 @@ const SEV = {
   LOW:     { color:'#3b82f6', icon:'🔵' },
   INFO:    { color:'#6b7280', icon:'⚪' },
 }
-const CAT_ICON = { Security:'🔒', security:'🔒', Performance:'⚡', performance:'⚡', Style:'✨', style:'✨', Bug:'🐛', 'error-handling':'⚠️', 'null-check':'❓', design:'🏗️', 'code-quality':'📝' }
+const CAT_ICON = {
+  Security:'🔒', security:'🔒', Performance:'⚡', performance:'⚡',
+  Style:'✨', style:'✨', Bug:'🐛', 'error-handling':'⚠️',
+  'null-check':'❓', design:'🏗️', 'code-quality':'📝'
+}
 
 export default function CodeReviewPanel({ review }) {
   const score = review.score ?? 0
@@ -17,7 +21,7 @@ export default function CodeReviewPanel({ review }) {
 
   return (
     <div style={{ padding:20, display:'flex', flexDirection:'column', gap:20 }}>
-      {/* Score */}
+      {/* Score Card */}
       <div style={{ background:'#1c1f2e', borderRadius:12, padding:20, border:`1px solid ${scoreColor}40`, display:'flex', alignItems:'center', gap:24 }}>
         <div style={{ textAlign:'center' }}>
           <div style={{ fontSize:48, fontWeight:800, color:scoreColor, lineHeight:1 }}>{score}</div>
@@ -29,9 +33,9 @@ export default function CodeReviewPanel({ review }) {
             <div style={{ height:'100%', width:`${score}%`, background:`linear-gradient(90deg,${scoreColor},${scoreColor}aa)`, borderRadius:6 }} />
           </div>
           <div style={{ display:'flex', gap:16, marginTop:10 }}>
-            {[['#ef4444','High',['HIGH','ERROR']],['#f59e0b','Medium',['MED','WARNING']],['#3b82f6','Low',['LOW','INFO']]].map(([c,l,sevs])=>(
+            {[['#ef4444','High',['HIGH','ERROR']],['#f59e0b','Med',['MED','WARNING']],['#3b82f6','Low',['LOW','INFO']]].map(([c,l,sevs]) => (
               <div key={l} style={{ display:'flex', alignItems:'center', gap:5 }}>
-                <span style={{ background:c+'25', color:c, borderRadius:10, padding:'1px 8px', fontSize:12, fontWeight:700 }}>{issues.filter(i=>sevs.includes(i.severity)).length}</span>
+                <span style={{ background:c+'25', color:c, borderRadius:10, padding:'1px 8px', fontSize:12, fontWeight:700 }}>{issues.filter(i => sevs.includes(i.severity)).length}</span>
                 <span style={{ color:'#6b7280', fontSize:12 }}>{l}</span>
               </div>
             ))}
@@ -56,12 +60,12 @@ export default function CodeReviewPanel({ review }) {
                   <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                     <span style={{ background:sev.color+'20', color:sev.color, border:`1px solid ${sev.color}40`, borderRadius:4, padding:'1px 7px', fontSize:11, fontWeight:700 }}>{sev.icon} {issue.severity}</span>
                     {issue.line && <span style={{ color:'#6b7280', fontSize:12 }}>Line {issue.line}</span>}
-                    <span style={{ color:'#6b7280', fontSize:12 }}>{CAT_ICON[issue.category]||'📌'} {issue.category}</span>
+                    <span style={{ color:'#6b7280', fontSize:12 }}>{CAT_ICON[issue.category] || '📌'} {issue.category}</span>
                   </div>
                   <div style={{ color:'#e1e4e8', fontWeight:600, marginBottom:4 }}>{issue.title}</div>
                   {issue.description && <div style={{ color:'#9ca3af', fontSize:13, marginBottom:6, lineHeight:1.5 }}>{issue.description}</div>}
                   {issue.suggestion && (
-                    <div style={{ background:'#10b98115', border:'1px solid #10b98130', borderRadius:6, padding:'7px 10px', color:'#6ee7b7', fontSize:12, lineHeight:1.5 }}>
+                    <div style={{ background:'#10b98115', border:'1px solid #10b98130', borderRadius:6, padding:'7px 10px', color:'#6ee7b7', fontSize:12 }}>
                       💡 <strong>Fix:</strong> {issue.suggestion}
                     </div>
                   )}
@@ -75,10 +79,8 @@ export default function CodeReviewPanel({ review }) {
       {positives.length > 0 && (
         <div>
           <div style={{ color:'#9ca3af', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>✅ Positive Aspects</div>
-          {positives.map((p,i) => (
-            <div key={i} style={{ display:'flex', gap:8, background:'#10b98110', border:'1px solid #10b98120', borderRadius:6, padding:'8px 12px', color:'#6ee7b7', fontSize:13, marginBottom:6 }}>
-              <span>✓</span> {p}
-            </div>
+          {positives.map((p, i) => (
+            <div key={i} style={{ display:'flex', gap:8, background:'#10b98110', border:'1px solid #10b98120', borderRadius:6, padding:'8px 12px', color:'#6ee7b7', fontSize:13, marginBottom:6 }}>✓ {p}</div>
           ))}
         </div>
       )}
