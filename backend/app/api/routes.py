@@ -6,8 +6,8 @@ router = APIRouter()
 
 class AnalyzeRequest(BaseModel):
     code: str
-    language: str = "python"  # python | java
-    mode: str = "both"        # review | test | both
+    language: str = "python"
+    mode: str = "both"
 
 class AnalyzeResponse(BaseModel):
     review: dict | None = None
