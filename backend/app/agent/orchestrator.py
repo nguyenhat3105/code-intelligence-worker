@@ -11,36 +11,36 @@ TOOLS = [
         "function_declarations": [
             {
                 "name": "run_static_analysis",
-                "description": "Run static analysis on the source code to detect syntax errors, code smells, and potential bugs.",
+                "description": "Run static analysis on source code to detect syntax errors, code smells, and bugs.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "code": {"type": "string", "description": "Source code to analyze"},
-                        "language": {"type": "string", "description": "Programming language: python or java"}
+                        "code": {"type": "string"},
+                        "language": {"type": "string"}
                     },
                     "required": ["code", "language"]
                 }
             },
             {
                 "name": "search_coding_standards",
-                "description": "Search the knowledge base for relevant coding standards, best practices, and guidelines.",
+                "description": "Search the knowledge base for coding standards and best practices.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Search query about coding standards"},
-                        "language": {"type": "string", "description": "Programming language"}
+                        "query": {"type": "string"},
+                        "language": {"type": "string"}
                     },
                     "required": ["query", "language"]
                 }
             },
             {
                 "name": "search_test_patterns",
-                "description": "Search for relevant test patterns and examples for the given code.",
+                "description": "Search for relevant test patterns and examples.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "code_context": {"type": "string", "description": "Brief description of what the code does"},
-                        "framework": {"type": "string", "description": "Test framework: pytest or junit"}
+                        "code_context": {"type": "string"},
+                        "framework": {"type": "string"}
                     },
                     "required": ["code_context", "framework"]
                 }
@@ -55,21 +55,7 @@ TOOL_MAP = {
     "search_test_patterns": search_test_patterns,
 }
 
-def build_system_prompt(mode: str) -> str:
-    base = """You are an expert Senior Software Engineer acting as a Code Intelligence Worker.
-Your job is to analyze source code using available tools and produce structured JSON output.
-
-ALWAYS follow this workflow:
-1. Call run_static_analysis first to detect raw issues
-2. Call search_coding_standards to find relevant best practices
-3. If generating tests, call search_test_patterns for patterns
-4. Synthesize all results into the final JSON response
-
-You MUST respond with valid JSON only (no markdown, no explanation outside JSON).
-"""
-    if mode == "review":
-        return base + """
-Return this exact JSON structure:
+REVIEW_JSON = '''
 {
   "review": {
     "summary": "brief overall assessment",
@@ -84,17 +70,16 @@ Return this exact JSON structure:
         "suggestion": "how to fix"
       }
     ],
-    "positive_aspects": ["list of good things in the code"]
+    "positive_aspects": ["good things in the code"]
   }
 }
-"""
-    elif mode == "test":
-        return base + """
-Return this exact JSON structure:
+'''
+
+TEST_JSON = '''
 {
   "tests": {
     "framework": "pytest or junit",
-    "summary": "brief description of test strategy",
+    "summary": "test strategy description",
     "test_cases": [
       {
         "name": "test_function_name",
@@ -103,13 +88,12 @@ Return this exact JSON structure:
         "code": "complete test code here"
       }
     ],
-    "coverage_areas": ["list of areas covered by tests"]
+    "coverage_areas": ["areas covered"]
   }
 }
-"""
-    else:
-        return base + """
-Return this exact JSON structure:
+'''
+
+BOTH_JSON = '''
 {
   "review": {
     "summary": "brief overall assessment",
@@ -124,11 +108,11 @@ Return this exact JSON structure:
         "suggestion": "how to fix"
       }
     ],
-    "positive_aspects": ["list of good things in the code"]
+    "positive_aspects": ["good things"]
   },
   "tests": {
     "framework": "pytest or junit",
-    "summary": "brief description of test strategy",
+    "summary": "test strategy description",
     "test_cases": [
       {
         "name": "test_function_name",
@@ -137,10 +121,27 @@ Return this exact JSON structure:
         "code": "complete test code here"
       }
     ],
-    "coverage_areas": ["list of areas covered by tests"]
+    "coverage_areas": ["areas covered"]
   }
 }
+'''
+
+def build_system_prompt(mode: str) -> str:
+    base = """You are an expert Senior Software Engineer acting as a Code Intelligence Worker.
+Analyze source code using the available tools and produce structured JSON output.
+
+Workflow:
+1. Call run_static_analysis to detect raw issues
+2. Call search_coding_standards for best practices
+3. If generating tests, call search_test_patterns
+4. Return ONLY valid JSON, no markdown or extra text.
 """
+    if mode == "review":
+        return base + "Return this JSON structure:" + REVIEW_JSON
+    elif mode == "test":
+        return base + "Return this JSON structure:" + TEST_JSON
+    else:
+        return base + "Return this JSON structure:" + BOTH_JSON
 
 async def run_agent(code: str, language: str, mode: str) -> dict:
     model = genai.GenerativeModel(
@@ -148,62 +149,40 @@ async def run_agent(code: str, language: str, mode: str) -> dict:
         system_instruction=build_system_prompt(mode),
         tools=TOOLS,
     )
-
     framework = "pytest" if language == "python" else "junit"
-    user_message = f"""Analyze the following {language} code:
+    user_message = f"""Analyze this {language} code:
 
 ```{language}
 {code}
 ```
 
-Language: {language}
-Test framework: {framework}
-Task: {"Code review only" if mode == "review" else "Generate tests only" if mode == "test" else "Code review AND test generation"}
-
-Use all available tools, then return the final JSON result."""
+Language: {language} | Framework: {framework} | Task: {mode}
+Use all tools, then return the final JSON."""
 
     chat = model.start_chat()
     response = chat.send_message(user_message)
 
-    max_iterations = 5
-    iteration = 0
-
-    while iteration < max_iterations:
-        iteration += 1
-        has_function_call = False
-
+    for _ in range(5):
+        has_fn = False
         for part in response.parts:
             if hasattr(part, "function_call") and part.function_call.name:
-                has_function_call = True
+                has_fn = True
                 fn_name = part.function_call.name
                 fn_args = dict(part.function_call.args)
-
-                print(f"🔧 Tool called: {fn_name}({fn_args})")
-
-                if fn_name in TOOL_MAP:
-                    tool_result = TOOL_MAP[fn_name](**fn_args)
-                else:
-                    tool_result = {"error": f"Unknown tool: {fn_name}"}
-
+                print(f"🔧 {fn_name}({list(fn_args.keys())})")
+                tool_result = TOOL_MAP.get(fn_name, lambda **k: {"error": "unknown"})(**fn_args)
                 response = chat.send_message(
-                    genai.protos.Content(
-                        parts=[genai.protos.Part(
-                            function_response=genai.protos.FunctionResponse(
-                                name=fn_name,
-                                response={"result": json.dumps(tool_result)}
-                            )
-                        )]
-                    )
+                    genai.protos.Content(parts=[genai.protos.Part(
+                        function_response=genai.protos.FunctionResponse(
+                            name=fn_name,
+                            response={"result": json.dumps(tool_result)}
+                        )
+                    )])
                 )
-
-        if not has_function_call:
+        if not has_fn:
             break
 
-    final_text = ""
-    for part in response.parts:
-        if hasattr(part, "text"):
-            final_text += part.text
-
+    final_text = "".join(p.text for p in response.parts if hasattr(p, "text"))
     clean = final_text.strip()
     if clean.startswith("```"):
         clean = clean.split("```")[1]
