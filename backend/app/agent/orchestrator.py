@@ -147,7 +147,7 @@ Workflow:
 
 async def run_agent(code: str, language: str, mode: str) -> dict:
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="gemini-2.0-flash",   # updated: gemini-1.5-flash deprecated
         system_instruction=build_system_prompt(mode),
         tools=TOOLS,
     )
