@@ -23,8 +23,7 @@ def _analyze_python(code: str) -> dict:
         import json
         if result.stdout.strip():
             try:
-                pylint_issues = json.loads(result.stdout)
-                for issue in pylint_issues[:10]:
+                for issue in json.loads(result.stdout)[:10]:
                     issues.append({
                         "line": issue.get("line", 0),
                         "type": issue.get("type", "warning"),
@@ -32,9 +31,9 @@ def _analyze_python(code: str) -> dict:
                         "symbol": issue.get("symbol", ""),
                         "tool": "pylint"
                     })
-            except:
+            except Exception:
                 pass
-    except:
+    except Exception:
         pass
     finally:
         os.unlink(tmp_path)
@@ -43,19 +42,18 @@ def _analyze_python(code: str) -> dict:
 
 def _basic_python_checks(code: str) -> list:
     issues = []
-    lines = code.split("\n")
     patterns = [
-        (r"except\s*:", "Bare except clause catches all exceptions", "WARNING", "bare-except"),
+        (r"except\s*:", "Bare except clause", "WARNING", "bare-except"),
         (r"eval\s*\(", "Use of eval() is a security risk", "ERROR", "security"),
         (r"exec\s*\(", "Use of exec() is a security risk", "ERROR", "security"),
-        (r"password\s*=\s*['\"][^'\"]+['\"]", "Hardcoded password detected", "ERROR", "security"),
-        (r"TODO|FIXME|HACK", "Unresolved TODO/FIXME comment", "INFO", "code-quality"),
-        (r"print\s*\(", "Consider using logging instead of print", "INFO", "style"),
-        (r"import \*", "Wildcard import is not recommended", "WARNING", "style"),
-        (r"== None", "Use 'is None' instead of '== None'", "WARNING", "style"),
-        (r"== True|== False", "Use truthiness check instead of == True/False", "WARNING", "style"),
+        (r"password\s*=\s*['\"][^'\"]+['\"]", "Hardcoded password", "ERROR", "security"),
+        (r"TODO|FIXME|HACK", "Unresolved TODO/FIXME", "INFO", "code-quality"),
+        (r"print\s*\(", "Use logging instead of print", "INFO", "style"),
+        (r"import \*", "Wildcard import not recommended", "WARNING", "style"),
+        (r"== None", "Use 'is None' instead", "WARNING", "style"),
+        (r"== True|== False", "Use truthiness check", "WARNING", "style"),
     ]
-    for i, line in enumerate(lines, 1):
+    for i, line in enumerate(code.split("\n"), 1):
         for pattern, message, severity, symbol in patterns:
             if re.search(pattern, line):
                 issues.append({"line": i, "type": severity, "message": message, "symbol": symbol, "tool": "basic-checker"})
@@ -63,19 +61,17 @@ def _basic_python_checks(code: str) -> list:
 
 def _analyze_java(code: str) -> dict:
     issues = []
-    lines = code.split("\n")
     patterns = [
         (r"catch\s*\(\s*Exception\s+\w+\s*\)\s*\{\s*\}", "Empty catch block", "HIGH", "error-handling"),
-        (r"System\.out\.print", "Use a logger instead of System.out.print", "INFO", "style"),
-        (r"e\.printStackTrace\(\)", "Avoid printStackTrace(), use a logger", "WARNING", "style"),
-        (r"password\s*=\s*['\"][^'\"]+['\"]", "Hardcoded password detected", "HIGH", "security"),
-        (r"TODO|FIXME|HACK", "Unresolved TODO/FIXME comment", "INFO", "code-quality"),
-        (r"==\s*null|null\s*==", "Potential NullPointerException risk", "WARNING", "null-check"),
-        (r"new\s+\w+\(\)", "Consider using factory methods or dependency injection", "INFO", "design"),
-        (r"catch\s*\(Exception", "Catching generic Exception is not recommended", "WARNING", "error-handling"),
-        (r"public\s+\w+\s+\w+\(.*\)\s*throws\s+Exception", "Avoid declaring 'throws Exception'", "WARNING", "design"),
+        (r"System\.out\.print", "Use a logger instead", "INFO", "style"),
+        (r"e\.printStackTrace\(\)", "Avoid printStackTrace()", "WARNING", "style"),
+        (r"password\s*=\s*['\"][^'\"]+['\"]", "Hardcoded password", "HIGH", "security"),
+        (r"TODO|FIXME|HACK", "Unresolved TODO/FIXME", "INFO", "code-quality"),
+        (r"==\s*null|null\s*==", "Potential NullPointerException", "WARNING", "null-check"),
+        (r"catch\s*\(Exception", "Catching generic Exception", "WARNING", "error-handling"),
+        (r"public\s+\w+\s+\w+\(.*\)\s*throws\s+Exception", "Avoid throws Exception", "WARNING", "design"),
     ]
-    for i, line in enumerate(lines, 1):
+    for i, line in enumerate(code.split("\n"), 1):
         for pattern, message, severity, symbol in patterns:
             if re.search(pattern, line):
                 issues.append({"line": i, "type": severity, "message": message, "symbol": symbol, "tool": "java-checker"})
