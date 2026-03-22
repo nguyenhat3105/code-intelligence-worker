@@ -1,10 +1,12 @@
 import os
 import json
+from dotenv import load_dotenv
 import google.generativeai as genai
 from app.tools.static_analyzer import run_static_analysis
 from app.tools.rag_search import search_coding_standards, search_test_patterns
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+load_dotenv()
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
 TOOLS = [
     {
@@ -55,7 +57,7 @@ TOOL_MAP = {
     "search_test_patterns": search_test_patterns,
 }
 
-REVIEW_JSON = '''
+REVIEW_JSON = """
 {
   "review": {
     "summary": "brief overall assessment",
@@ -73,9 +75,9 @@ REVIEW_JSON = '''
     "positive_aspects": ["good things in the code"]
   }
 }
-'''
+"""
 
-TEST_JSON = '''
+TEST_JSON = """
 {
   "tests": {
     "framework": "pytest or junit",
@@ -91,9 +93,9 @@ TEST_JSON = '''
     "coverage_areas": ["areas covered"]
   }
 }
-'''
+"""
 
-BOTH_JSON = '''
+BOTH_JSON = """
 {
   "review": {
     "summary": "brief overall assessment",
@@ -124,7 +126,7 @@ BOTH_JSON = '''
     "coverage_areas": ["areas covered"]
   }
 }
-'''
+"""
 
 def build_system_prompt(mode: str) -> str:
     base = """You are an expert Senior Software Engineer acting as a Code Intelligence Worker.
@@ -150,14 +152,7 @@ async def run_agent(code: str, language: str, mode: str) -> dict:
         tools=TOOLS,
     )
     framework = "pytest" if language == "python" else "junit"
-    user_message = f"""Analyze this {language} code:
-
-```{language}
-{code}
-```
-
-Language: {language} | Framework: {framework} | Task: {mode}
-Use all tools, then return the final JSON."""
+    user_message = f"""Analyze this {language} code:\n\n```{language}\n{code}\n```\n\nLanguage: {language} | Framework: {framework} | Task: {mode}\nUse all tools, then return the final JSON."""
 
     chat = model.start_chat()
     response = chat.send_message(user_message)
