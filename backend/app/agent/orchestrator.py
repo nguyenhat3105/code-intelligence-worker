@@ -8,6 +8,13 @@ from app.tools.rag_search import search_coding_standards, search_test_patterns
 load_dotenv()
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
+# Model fallback list — tries each in order until one works
+MODEL_PRIORITY = [
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+]
+
 TOOLS = [
     {
         "function_declarations": [
@@ -145,15 +152,12 @@ Workflow:
     else:
         return base + "Return this JSON structure:" + BOTH_JSON
 
-async def run_agent(code: str, language: str, mode: str) -> dict:
+async def _call_model(model_name: str, system_prompt: str, user_message: str):
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",   # updated: gemini-1.5-flash deprecated
-        system_instruction=build_system_prompt(mode),
+        model_name=model_name,
+        system_instruction=system_prompt,
         tools=TOOLS,
     )
-    framework = "pytest" if language == "python" else "junit"
-    user_message = f"""Analyze this {language} code:\n\n```{language}\n{code}\n```\n\nLanguage: {language} | Framework: {framework} | Task: {mode}\nUse all tools, then return the final JSON."""
-
     chat = model.start_chat()
     response = chat.send_message(user_message)
 
@@ -164,7 +168,7 @@ async def run_agent(code: str, language: str, mode: str) -> dict:
                 has_fn = True
                 fn_name = part.function_call.name
                 fn_args = dict(part.function_call.args)
-                print(f"🔧 {fn_name}({list(fn_args.keys())})")
+                print(f"🔧 [{model_name}] {fn_name}({list(fn_args.keys())})")
                 tool_result = TOOL_MAP.get(fn_name, lambda **k: {"error": "unknown"})(**fn_args)
                 response = chat.send_message(
                     genai.protos.Content(parts=[genai.protos.Part(
@@ -176,22 +180,41 @@ async def run_agent(code: str, language: str, mode: str) -> dict:
                 )
         if not has_fn:
             break
+    return response
 
-    final_text = "".join(p.text for p in response.parts if hasattr(p, "text"))
-    clean = final_text.strip()
-    if clean.startswith("```"):
-        clean = clean.split("```")[1]
-        if clean.startswith("json"):
-            clean = clean[4:]
-    clean = clean.strip()
+async def run_agent(code: str, language: str, mode: str) -> dict:
+    framework = "pytest" if language == "python" else "junit"
+    system_prompt = build_system_prompt(mode)
+    user_message = f"""Analyze this {language} code:\n\n```{language}\n{code}\n```\n\nLanguage: {language} | Framework: {framework} | Task: {mode}\nUse all tools, then return the final JSON."""
 
-    try:
-        result = json.loads(clean)
-        result["language"] = language
-        return result
-    except json.JSONDecodeError:
-        return {
-            "language": language,
-            "review": {"summary": "Parse error", "score": 0, "issues": [], "positive_aspects": [], "raw": final_text},
-            "tests": None
-        }
+    last_error = None
+    final_text = ""
+    for model_name in MODEL_PRIORITY:
+        try:
+            print(f"🤖 Trying model: {model_name}")
+            response = await _call_model(model_name, system_prompt, user_message)
+            final_text = "".join(p.text for p in response.parts if hasattr(p, "text"))
+            clean = final_text.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            clean = clean.strip()
+            result = json.loads(clean)
+            result["language"] = language
+            print(f"✅ Success with: {model_name}")
+            return result
+        except json.JSONDecodeError:
+            return {
+                "language": language,
+                "review": {"summary": "Parse error", "score": 0, "issues": [], "positive_aspects": [], "raw": final_text},
+                "tests": None
+            }
+        except Exception as e:
+            last_error = str(e)
+            print(f"⚠️  {model_name} failed: {e}")
+            if "429" in str(e) or "quota" in str(e).lower() or "not found" in str(e).lower() or "404" in str(e):
+                continue
+            raise
+
+    raise Exception(f"All models exhausted. Last error: {last_error}")
